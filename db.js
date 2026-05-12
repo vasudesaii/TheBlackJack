@@ -234,7 +234,9 @@ function persistRoundResults(roomId, roundNumber, playerResults, dealerValue) {
 }
 
 async function initDb() {
-  const SQL = await initSqlJs();
+  const SQL = await initSqlJs({
+    locateFile: (file) => path.join(__dirname, 'node_modules', 'sql.js', 'dist', file),
+  });
   if (fs.existsSync(DB_PATH)) {
     db = new SQL.Database(fs.readFileSync(DB_PATH));
     console.log('[DB] Loaded casino.db from disk');

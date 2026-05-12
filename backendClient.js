@@ -6,7 +6,9 @@
 (function () {
   'use strict';
 
-  const BACKEND_URL = 'http://localhost:3001';
+  const BACKEND_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'http://localhost:3001'
+    : window.location.origin;
   const STORAGE_KEY_ACCESS  = 'rbjack_access';
   const STORAGE_KEY_REFRESH = 'rbjack_refresh';
   const STORAGE_KEY_USER    = 'rbjack_user';
