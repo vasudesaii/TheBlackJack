@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: casino_backend
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: CLIENT_URL
+        sync: false
