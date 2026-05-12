@@ -1,0 +1,4 @@
+node_modules/
+casino.db
+.env
+*.log

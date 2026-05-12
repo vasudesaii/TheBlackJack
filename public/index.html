@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Royal Blackjack</title>
+    <meta name="description" content="Advanced multiplayer blackjack with side bets, splits, and premium UI.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <!-- ===== WELCOME SCREEN ===== -->
+    <div id="welcome-screen" class="screen active">
+        <div class="welcome-box">
+            <div class="welcome-logo">♠ Royal Blackjack</div>
+            <p class="welcome-sub">Advanced Casino Experience</p>
+            <div class="setup-group">
+                <label class="setup-label">Players</label>
+                <div class="btn-row" id="player-count-selector">
+                    <button class="toggle-btn" data-count="1">1</button>
+                    <button class="toggle-btn active" data-count="2">2</button>
+                    <button class="toggle-btn" data-count="3">3</button>
+                    <button class="toggle-btn" data-count="4">4</button>
+                    <button class="toggle-btn" data-count="5">5</button>
+                </div>
+            </div>
+            <div id="player-names-section" class="setup-names"></div>
+            <div class="setup-group">
+                <label class="setup-label">Decks</label>
+                <div class="btn-row" id="deck-count-selector">
+                    <button class="toggle-btn" data-decks="2">2</button>
+                    <button class="toggle-btn" data-decks="4">4</button>
+                    <button class="toggle-btn active" data-decks="6">6</button>
+                    <button class="toggle-btn" data-decks="8">8</button>
+                </div>
+            </div>
+            <button id="start-game-btn" class="btn-green btn-large">Start Game</button>
+        </div>
+    </div>
+
+    <!-- ===== GAME SCREEN ===== -->
+    <div id="game-screen" class="screen">
+        <!-- LEFT PANEL -->
+        <div class="left-panel">
+            <div class="panel-section">
+                <div class="bet-header">
+                    <span class="bet-title">Bet Amount</span>
+                    <span class="bet-balance" id="active-player-balance">₹10,000</span>
+                </div>
+                <div class="bet-input-row">
+                    <span class="currency-symbol">₹</span>
+                    <input type="number" id="bet-input" class="bet-input" value="100" min="10">
+                    <button class="bet-mod-btn" id="bet-half">½</button>
+                    <button class="bet-mod-btn" id="bet-double">2×</button>
+                </div>
+            </div>
+
+            <div class="panel-section" id="actions-section">
+                <div class="action-grid">
+                    <button class="action-btn" id="hit-btn" disabled>Hit 🃏</button>
+                    <button class="action-btn" id="stand-btn" disabled>Stand ✋</button>
+                    <button class="action-btn" id="split-btn" disabled>Split ✂️</button>
+                    <button class="action-btn" id="double-btn" disabled>Double ×2</button>
+                </div>
+                <div class="action-row-extra">
+                    <button class="action-btn-sm" id="surrender-btn" disabled>Surrender</button>
+                    <button class="action-btn-sm" id="insurance-btn" disabled>Insurance</button>
+                </div>
+            </div>
+
+            <button class="btn-green btn-deal" id="deal-btn">Bet</button>
+
+            <!-- Player tabs for multi-player -->
+            <div class="panel-section" id="player-tabs-section">
+                <label class="panel-label">Active Player</label>
+                <div class="player-tabs" id="player-tabs"></div>
+            </div>
+
+            <div class="panel-section panel-bottom">
+                <div class="shoe-info-panel">
+                    <span class="shoe-label">Shoe</span>
+                    <div class="shoe-bar-panel">
+                        <div id="shoe-progress" class="shoe-fill-panel"></div>
+                    </div>
+                    <span id="cards-remaining" class="shoe-count">312</span>
+                </div>
+                <div class="panel-links">
+                    <button class="link-btn" id="rules-btn">📜 Rules</button>
+                    <button class="link-btn" id="stats-btn">📊 Stats</button>
+                    <button class="link-btn" id="graph-btn">📈 Graph</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MAIN TABLE -->
+        <div class="table-area">
+            <!-- Dealer -->
+            <div class="dealer-zone">
+                <div class="zone-label">DEALER</div>
+                <div id="dealer-hand" class="card-row"></div>
+                <div id="dealer-score" class="score-pill hidden"></div>
+            </div>
+
+            <!-- Table info -->
+            <div class="table-info">
+                <span>BLACKJACK PAYS 3 TO 2</span>
+                <span>INSURANCE PAYS 2 TO 1</span>
+            </div>
+
+            <!-- Players -->
+            <div id="players-zone" class="players-zone"></div>
+
+            <!-- Game message -->
+            <div id="game-message" class="game-msg hidden"></div>
+
+            <!-- Table Footer -->
+            <div class="table-footer">
+                <div class="footer-left">
+                    <button class="footer-icon-btn">⚙️</button>
+                    <button class="footer-icon-btn">📊</button>
+                </div>
+                <div class="footer-center">
+                    <span class="footer-logo">Royal Blackjack</span>
+                </div>
+                <div class="footer-right">
+                    <div class="fairness-badge">
+                        <span class="check-icon">✓</span> Fairness
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Modal -->
+    <div id="results-overlay" class="modal-overlay hidden">
+        <div class="modal-box">
+            <h2 class="modal-title">Round Results</h2>
+            <div id="results-list" class="results-list"></div>
+            <button id="next-round-btn" class="btn-green btn-large">Next Round</button>
+        </div>
+    </div>
+
+    <!-- Rules Modal -->
+    <div id="rules-modal" class="modal-overlay hidden">
+        <div class="modal-box">
+            <button class="modal-x" id="close-rules">✕</button>
+            <h2 class="modal-title">House Rules</h2>
+            <div class="rules-body">
+                <ul>
+                    <li>Blackjack pays 3:2</li>
+                    <li>Dealer stands on all 17s</li>
+                    <li>Double down on any two cards</li>
+                    <li>Split up to 3 times (4 hands)</li>
+                    <li>Split Aces receive one card each</li>
+                    <li>Surrender on first two cards</li>
+                    <li>Insurance pays 2:1</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Modal -->
+    <div id="stats-modal" class="modal-overlay hidden">
+        <div class="modal-box">
+            <button class="modal-x" id="close-stats">✕</button>
+            <h2 class="modal-title">Statistics</h2>
+            <div id="stats-content" class="stats-body"></div>
+        </div>
+    </div>
+
+    <!-- Live Stats Modal -->
+    <div id="livestats-modal" class="modal-overlay hidden">
+        <div class="modal-box livestats-box">
+            <div class="livestats-header">
+                <span class="livestats-title">📈 Live Stats</span>
+                <button class="modal-x" id="close-livestats">✕</button>
+            </div>
+            <div class="livestats-player-selector">
+                <select id="livestats-player-select" class="livestats-select"></select>
+                <button class="livestats-refresh" id="livestats-refresh">⟳</button>
+            </div>
+            <div class="livestats-grid">
+                <div class="ls-cell">
+                    <span class="ls-label">Profit</span>
+                    <span class="ls-value" id="ls-profit">₹0</span>
+                </div>
+                <div class="ls-cell">
+                    <span class="ls-label">Wins</span>
+                    <span class="ls-value ls-green" id="ls-wins">0</span>
+                </div>
+                <div class="ls-cell">
+                    <span class="ls-label">Wagered</span>
+                    <span class="ls-value" id="ls-wagered">₹0</span>
+                </div>
+                <div class="ls-cell">
+                    <span class="ls-label">Losses</span>
+                    <span class="ls-value ls-red" id="ls-losses">0</span>
+                </div>
+            </div>
+            <div class="livestats-graph-container">
+                <canvas id="profit-graph" width="380" height="180"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script src="engine.js"></script>
+    <script src="ui.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
