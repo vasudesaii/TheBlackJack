@@ -52,15 +52,14 @@ router.post('/register', rateLimit(5, 60_000), async (req, res) => {
     return res.status(400).json({ error: 'Invalid email format' });
   }
 
-  // Check username taken
-  const existing = Queries.getUserByUsername.get(username);
+  const existing = await Queries.getUserByUsername.get(username);
   if (existing) return res.status(409).json({ error: 'Username already taken' });
 
   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
   let userId;
   try {
-    userId = registerUser({ username, email: email || null, passwordHash });
+    userId = await registerUser({ username, email: email || null, passwordHash });
   } catch (err) {
     if (err.message.includes('UNIQUE')) {
       return res.status(409).json({ error: 'Username or email already in use' });
@@ -72,7 +71,7 @@ router.post('/register', rateLimit(5, 60_000), async (req, res) => {
   const accessToken = signAccessToken(userId, username);
   const refreshToken = signRefreshToken(userId, username);
   const expiresAt = Math.floor(Date.now() / 1000) + REFRESH_TTL_DAYS * 86400;
-  Queries.saveRefreshToken.run({ userId, token: refreshToken, expiresAt });
+  await Queries.saveRefreshToken.run({ userId, token: refreshToken, expiresAt });
 
   res.status(201).json({
     message: 'Registration successful',
@@ -90,18 +89,18 @@ router.post('/login', rateLimit(10, 60_000), async (req, res) => {
     return res.status(400).json({ error: 'Username and password required' });
   }
 
-  const user = Queries.getUserByUsername.get(username);
+  const user = await Queries.getUserByUsername.get(username);
   if (!user) return res.status(401).json({ error: 'Invalid credentials' });
 
   const match = await bcrypt.compare(password, user.password_hash);
   if (!match) return res.status(401).json({ error: 'Invalid credentials' });
 
-  Queries.updateLastLogin.run(user.id);
+  await Queries.updateLastLogin.run(user.id);
 
   const accessToken = signAccessToken(user.id, user.username);
   const refreshToken = signRefreshToken(user.id, user.username);
   const expiresAt = Math.floor(Date.now() / 1000) + REFRESH_TTL_DAYS * 86400;
-  Queries.saveRefreshToken.run({ userId: user.id, token: refreshToken, expiresAt });
+  await Queries.saveRefreshToken.run({ userId: user.id, token: refreshToken, expiresAt });
 
   res.json({
     message: 'Login successful',
@@ -112,14 +111,14 @@ router.post('/login', rateLimit(10, 60_000), async (req, res) => {
 });
 
 // ──────────── REFRESH ────────────
-router.post('/refresh', (req, res) => {
+router.post('/refresh', async (req, res) => {
   const { refreshToken } = req.body || {};
   if (!refreshToken) return res.status(400).json({ error: 'Refresh token required' });
 
-  const stored = Queries.getRefreshToken.get(refreshToken);
+  const stored = await Queries.getRefreshToken.get(refreshToken);
   if (!stored) return res.status(401).json({ error: 'Invalid refresh token' });
   if (stored.expires_at < Math.floor(Date.now() / 1000)) {
-    Queries.deleteRefreshToken.run(refreshToken);
+    await Queries.deleteRefreshToken.run(refreshToken);
     return res.status(401).json({ error: 'Refresh token expired' });
   }
 
@@ -127,32 +126,31 @@ router.post('/refresh', (req, res) => {
   try {
     payload = verifyToken(refreshToken);
   } catch {
-    Queries.deleteRefreshToken.run(refreshToken);
+    await Queries.deleteRefreshToken.run(refreshToken);
     return res.status(401).json({ error: 'Invalid refresh token' });
   }
 
-  // Rotate: delete old, issue new
-  Queries.deleteRefreshToken.run(refreshToken);
+  await Queries.deleteRefreshToken.run(refreshToken);
   const newAccess = signAccessToken(payload.userId, payload.username);
   const newRefresh = signRefreshToken(payload.userId, payload.username);
   const expiresAt = Math.floor(Date.now() / 1000) + REFRESH_TTL_DAYS * 86400;
-  Queries.saveRefreshToken.run({ userId: payload.userId, token: newRefresh, expiresAt });
+  await Queries.saveRefreshToken.run({ userId: payload.userId, token: newRefresh, expiresAt });
 
-  const user = Queries.getUserById.get(payload.userId);
+  const user = await Queries.getUserById.get(payload.userId);
 
   res.json({ accessToken: newAccess, refreshToken: newRefresh, user });
 });
 
 // ──────────── LOGOUT ────────────
-router.post('/logout', (req, res) => {
+router.post('/logout', async (req, res) => {
   const { refreshToken } = req.body || {};
-  if (refreshToken) Queries.deleteRefreshToken.run(refreshToken);
+  if (refreshToken) await Queries.deleteRefreshToken.run(refreshToken);
   res.json({ message: 'Logged out' });
 });
 
 // ──────────── ME ────────────
-router.get('/me', authMiddleware, (req, res) => {
-  const user = Queries.getUserById.get(req.userId);
+router.get('/me', authMiddleware, async (req, res) => {
+  const user = await Queries.getUserById.get(req.userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
   res.json({ user });
 });

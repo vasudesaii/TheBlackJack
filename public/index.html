@@ -10,8 +10,110 @@
 </head>
 <body>
 
+    <!-- ===== AUTH SCREEN ===== -->
+    <div id="auth-screen" class="screen active">
+        <div class="welcome-box">
+            <div class="welcome-logo">♠ Royal Blackjack</div>
+            <p class="welcome-sub">Login to Play Online</p>
+            <div id="login-form">
+                <input type="text" id="username" placeholder="Username" class="setup-input">
+                <input type="password" id="password" placeholder="Password" class="setup-input">
+                <button id="login-btn" class="btn-green btn-large">Login</button>
+                <button id="signup-btn" class="btn-large">Sign Up</button>
+            </div>
+            <div id="error-msg" style="color: red; margin-top: 10px;"></div>
+        </div>
+    </div>
+
+    <!-- ===== PROFILE DASHBOARD SCREEN ===== -->
+    <div id="profile-screen" class="screen">
+        <div class="welcome-box">
+            <div class="profile-header">
+                <div class="welcome-logo">♠ Royal Blackjack</div>
+                <button id="logout-btn" class="btn-small">Logout</button>
+            </div>
+            <div class="profile-info">
+                <h2 id="profile-username">Player Name</h2>
+                <div class="balance-display">
+                    <span class="balance-label">Current Balance:</span>
+                    <span class="balance-amount" id="profile-balance">₹10,000</span>
+                </div>
+            </div>
+            <div class="profile-stats">
+                <div class="stat-box">
+                    <span class="stat-label">Total Profit</span>
+                    <span class="stat-value" id="profile-profit">₹0</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Rounds Played</span>
+                    <span class="stat-value" id="profile-rounds">0</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Win Rate</span>
+                    <span class="stat-value" id="profile-winrate">0%</span>
+                </div>
+            </div>
+            <div class="profile-actions">
+                <button id="reset-profile-btn" class="btn-red btn-large">Reset Profile</button>
+            </div>
+            <div class="mode-selection">
+                <h3>Select Game Mode</h3>
+                <button id="practice-mode-btn" class="btn-green btn-large">🎯 Practice Mode</button>
+                <button id="online-mode-btn" class="btn-blue btn-large">🌐 Online Mode</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== PRACTICE MODE SETUP SCREEN ===== -->
+    <div id="practice-setup-screen" class="screen">
+        <div class="welcome-box">
+            <div class="welcome-logo">♠ Practice Mode</div>
+            <p class="welcome-sub">Play with AI Opponents</p>
+            <div class="setup-group">
+                <label class="setup-label">AI Opponents</label>
+                <div class="btn-row" id="ai-count-selector">
+                    <button class="toggle-btn active" data-count="0">Solo</button>
+                    <button class="toggle-btn" data-count="1">1 Bot</button>
+                    <button class="toggle-btn" data-count="2">2 Bots</button>
+                    <button class="toggle-btn" data-count="3">3 Bots</button>
+                    <button class="toggle-btn" data-count="4">4 Bots</button>
+                </div>
+            </div>
+            <div class="setup-group">
+                <label class="setup-label">Decks</label>
+                <div class="btn-row" id="deck-count-selector">
+                    <button class="toggle-btn" data-decks="2">2</button>
+                    <button class="toggle-btn" data-decks="4">4</button>
+                    <button class="toggle-btn active" data-decks="6">6</button>
+                    <button class="toggle-btn" data-decks="8">8</button>
+                </div>
+            </div>
+            <div class="setup-group">
+                <button id="start-practice-btn" class="btn-green btn-large">Start Practice</button>
+                <button id="back-to-profile-btn" class="btn-large">Back</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== ONLINE MODE SCREEN ===== -->
+    <div id="online-mode-screen" class="screen">
+        <div class="welcome-box">
+            <div class="welcome-logo">♠ Online Multiplayer</div>
+            <div class="online-actions">
+                <button id="create-table-btn" class="btn-green btn-large">Create Table</button>
+                <button id="join-table-btn" class="btn-blue btn-large">Join Table</button>
+                <button id="back-to-profile-btn2" class="btn-large">Back</button>
+            </div>
+            <div id="table-list-container" class="table-list">
+                <h3>Available Tables</h3>
+                <input type="text" id="search-tables" placeholder="Search tables..." class="setup-input">
+                <div id="available-tables" class="tables-grid"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- ===== WELCOME SCREEN ===== -->
-    <div id="welcome-screen" class="screen active">
+    <div id="welcome-screen" class="screen">
         <div class="welcome-box">
             <div class="welcome-logo">♠ Royal Blackjack</div>
             <p class="welcome-sub">Advanced Casino Experience</p>
@@ -28,7 +130,7 @@
             <div id="player-names-section" class="setup-names"></div>
             <div class="setup-group">
                 <label class="setup-label">Decks</label>
-                <div class="btn-row" id="deck-count-selector">
+                <div class="btn-row" id="deck-count-selector-game">
                     <button class="toggle-btn" data-decks="2">2</button>
                     <button class="toggle-btn" data-decks="4">4</button>
                     <button class="toggle-btn active" data-decks="6">6</button>
@@ -204,6 +306,8 @@
         </div>
     </div>
 
+    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+    <script src="backendClient.js"></script>
     <script src="engine.js"></script>
     <script src="ui.js"></script>
     <script src="game.js"></script>

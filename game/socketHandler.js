@@ -32,7 +32,7 @@ module.exports = function setupSockets(io) {
     console.log(`🔌 Connected: ${socket.username} (${socket.id})`);
 
     // ──────────── CREATE ROOM ────────────
-    socket.on('room:create', ({ numDecks = 6, maxPlayers = 5 } = {}, ack) => {
+    socket.on('room:create', async ({ numDecks = 6, maxPlayers = 5, tableName = '' } = {}, ack) => {
       try {
         if (numDecks && ![2, 4, 6, 8].includes(numDecks)) {
           return ack?.({ error: 'numDecks must be 2, 4, 6, or 8' });
@@ -41,10 +41,11 @@ module.exports = function setupSockets(io) {
           return ack?.({ error: 'maxPlayers must be 1–5' });
         }
 
-        const room = createRoom({ numDecks, maxPlayers });
+        const room = await createRoom({ numDecks, maxPlayers, tableName });
         room.io = io;
 
-        const balance = Queries.getBalance.get(socket.userId)?.balance ?? 0;
+        const balanceRow = await Queries.getBalance.get(socket.userId);
+        const balance = balanceRow?.balance ?? 0;
         const joinResult = joinRoom(room, socket, {
           userId: socket.userId,
           username: socket.username,
@@ -66,14 +67,15 @@ module.exports = function setupSockets(io) {
     });
 
     // ──────────── JOIN ROOM ────────────
-    socket.on('room:join', ({ roomId } = {}, ack) => {
+    socket.on('room:join', async ({ roomId } = {}, ack) => {
       try {
         if (!roomId) return ack?.({ error: 'roomId required' });
 
         const room = getRoom(roomId.toUpperCase());
         if (!room) return ack?.({ error: 'Room not found' });
 
-        const balance = Queries.getBalance.get(socket.userId)?.balance ?? 0;
+        const balanceRow = await Queries.getBalance.get(socket.userId);
+        const balance = balanceRow?.balance ?? 0;
         const result = joinRoom(room, socket, {
           userId: socket.userId,
           username: socket.username,
@@ -86,7 +88,6 @@ module.exports = function setupSockets(io) {
         socket.join(room.id);
         socketRoomMap.set(socket.id, room.id);
 
-        // Notify others
         socket.to(room.id).emit('player:joined', {
           username: socket.username,
           playersCount: room.players.size,

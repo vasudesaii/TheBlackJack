@@ -109,7 +109,7 @@ function sanitizeRoom(room) {
 
 // ──────────────── ROOM LIFECYCLE ────────────────
 
-function createRoom({ numDecks = 6, maxPlayers = 5 } = {}) {
+function createRoom({ numDecks = 6, maxPlayers = 5, tableName = '' } = {}) {
   const id = uuidv4().slice(0, 8).toUpperCase();
   const dbSession = Queries.createSession.run({ roomId: id, numDecks, maxPlayers });
 
@@ -118,6 +118,7 @@ function createRoom({ numDecks = 6, maxPlayers = 5 } = {}) {
     phase: PHASE.WAITING,
     numDecks,
     maxPlayers,
+    tableName: tableName || `Table ${id}`,
     shoe: createShoe(numDecks),
     roundNumber: 0,
     players: new Map(),
@@ -128,7 +129,7 @@ function createRoom({ numDecks = 6, maxPlayers = 5 } = {}) {
     actionTimer: null,
     resultsTimer: null,
     sessionDbId: dbSession.lastInsertRowid,
-    io: null, // injected by socket handler
+    io: null,
   };
 
   rooms.set(id, room);
@@ -643,9 +644,21 @@ function emit(room, event, data) {
   }
 }
 
+function listAvailableRooms() {
+  return Array.from(rooms.values())
+    .filter(room => room.phase === PHASE.WAITING && room.players.size < room.maxPlayers)
+    .map(room => ({
+      id: room.id,
+      tableName: room.tableName,
+      numDecks: room.numDecks,
+      maxPlayers: room.maxPlayers,
+      playersCount: room.players.size,
+    }));
+}
+
 module.exports = {
   PHASE, MIN_BET, MAX_BET,
   createRoom, getRoom, joinRoom, leaveRoom,
   placeBet, playerAction, takeInsurance,
-  sanitizeRoom, rooms,
+  sanitizeRoom, rooms, listAvailableRooms,
 };

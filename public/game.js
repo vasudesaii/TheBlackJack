@@ -1,4 +1,275 @@
-// ===== GAME CONTROLLER (Stake-style) =====
+// ============================================
+// FRONTEND AUTHENTICATION & PROFILE CONTROLLER
+// Handles: Auth, Profile, Mode Selection
+// ============================================
+
+// BackendClient is now provided by backendClient.js
+const BackendClient = window.BackendClient;
+
+
+// ============================================
+// SCREEN MANAGEMENT
+// ============================================
+
+const ScreenManager = {
+  currentScreen: null,
+
+  show(screenId) {
+    if (this.currentScreen) {
+      document.getElementById(this.currentScreen).classList.remove('active');
+    }
+    const screen = document.getElementById(screenId);
+    if (screen) {
+      screen.classList.add('active');
+      this.currentScreen = screenId;
+    }
+  },
+};
+
+// ============================================
+// AUTH SCREEN
+// ============================================
+
+function initAuthScreen() {
+  const loginBtn = document.getElementById('login-btn');
+  const signupBtn = document.getElementById('signup-btn');
+  const errorMsg = document.getElementById('error-msg');
+  const usernameInput = document.getElementById('username');
+  const passwordInput = document.getElementById('password');
+
+  const submitHandler = async (isSignup) => {
+    return async (e) => {
+      if (e) e.preventDefault();
+      errorMsg.textContent = '';
+      const username = usernameInput.value.trim();
+      const password = passwordInput.value.trim();
+
+      if (!username || !password) {
+        errorMsg.textContent = 'Username and password required';
+        return;
+      }
+
+      try {
+        if (isSignup) {
+          await BackendClient.Auth.register(username, password, '');
+        } else {
+          await BackendClient.Auth.login(username, password);
+        }
+        usernameInput.value = '';
+        passwordInput.value = '';
+        showProfileScreen();
+      } catch (err) {
+        errorMsg.textContent = err.message || 'Authentication failed';
+      }
+    };
+  };
+
+  if (loginBtn) loginBtn.addEventListener('click', submitHandler(false)());
+  if (signupBtn) signupBtn.addEventListener('click', submitHandler(true)());
+}
+
+// ============================================
+// PROFILE SCREEN
+// ============================================
+
+async function showProfileScreen() {
+  ScreenManager.show('profile-screen');
+  await loadProfileData();
+}
+
+async function loadProfileData() {
+  try {
+    const stats = await BackendClient.Player.getStats();
+    const user = BackendClient.TokenStore.getUser();
+
+    const usernameEl = document.getElementById('profile-username');
+    const balanceEl = document.getElementById('profile-balance');
+    const profitEl = document.getElementById('profile-profit');
+    const roundsEl = document.getElementById('profile-rounds');
+    const winrateEl = document.getElementById('profile-winrate');
+
+    if (usernameEl) usernameEl.textContent = user.username || 'Player';
+    if (balanceEl) balanceEl.textContent = `₹${(stats.balance || 0).toLocaleString('en-IN')}`;
+    if (profitEl) profitEl.textContent = `₹${((stats.balance || 0) - 10000).toLocaleString('en-IN')}`;
+    if (roundsEl) roundsEl.textContent = (stats.rounds_played || 0).toString();
+    if (winrateEl) winrateEl.textContent = `${(stats.win_rate || 0).toFixed(1)}%`;
+  } catch (err) {
+    console.error('Failed to load profile:', err);
+  }
+}
+
+function initProfileScreen() {
+  const resetBtn = document.getElementById('reset-profile-btn');
+  const practiceBtn = document.getElementById('practice-mode-btn');
+  const onlineBtn = document.getElementById('online-mode-btn');
+  const logoutBtn = document.getElementById('logout-btn');
+
+  if (resetBtn) {
+    resetBtn.addEventListener('click', async () => {
+      if (confirm('Reset profile? This will reset your balance to ₹10,000 and clear all stats.')) {
+        try {
+          await BackendClient.Player.reset();
+          await loadProfileData();
+          alert('Profile reset successful!');
+        } catch (err) {
+          alert(err.message);
+        }
+      }
+    });
+  }
+
+  if (practiceBtn) {
+    practiceBtn.addEventListener('click', () => {
+      ScreenManager.show('practice-setup-screen');
+    });
+  }
+
+  if (onlineBtn) {
+    onlineBtn.addEventListener('click', () => {
+      ScreenManager.show('online-mode-screen');
+      loadAvailableRooms();
+    });
+  }
+
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', async () => {
+      await BackendClient.Auth.logout();
+      ScreenManager.show('auth-screen');
+    });
+  }
+}
+
+// ============================================
+// PRACTICE MODE SCREEN
+// ============================================
+
+function initPracticeScreen() {
+  const startBtn = document.getElementById('start-practice-btn');
+  const backBtn = document.getElementById('back-to-profile-btn');
+  const aiCountBtns = document.querySelectorAll('#ai-count-selector .toggle-btn');
+  const deckBtns = document.querySelectorAll('#deck-count-selector .toggle-btn');
+
+  let selectedAiCount = 0;
+  let selectedDecks = 6;
+
+  // Track AI opponent selection
+  aiCountBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      aiCountBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedAiCount = parseInt(btn.dataset.count);
+    });
+  });
+
+  // Track deck selection
+  deckBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      deckBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedDecks = parseInt(btn.dataset.decks);
+    });
+  });
+
+  if (startBtn) {
+    startBtn.addEventListener('click', () => {
+      startPracticeGame(selectedAiCount, selectedDecks);
+    });
+  }
+
+  if (backBtn) {
+    backBtn.addEventListener('click', () => {
+      ScreenManager.show('profile-screen');
+    });
+  }
+}
+
+async function startPracticeGame(numBots, numDecks) {
+  console.log(`Starting practice mode: ${numBots} bots, ${numDecks} decks`);
+  ScreenManager.show('game-screen');
+}
+
+// ============================================
+// ONLINE MODE SCREEN
+// ============================================
+
+async function loadAvailableRooms() {
+  try {
+    const rooms = await BackendClient.Player.getAvailableRooms();
+    displayRoomList(rooms);
+  } catch (err) {
+    console.error('Failed to load rooms:', err);
+    const listEl = document.getElementById('available-tables');
+    if (listEl) listEl.innerHTML = '<p>Failed to load tables</p>';
+  }
+}
+
+function displayRoomList(rooms) {
+  const listEl = document.getElementById('available-tables');
+  if (!listEl) return;
+
+  if (rooms.length === 0) {
+    listEl.innerHTML = '<p>No tables available. Create one to get started!</p>';
+    return;
+  }
+
+  listEl.innerHTML = rooms.map(room => `
+    <div class="table-item" data-room-id="${room.id}">
+      <div class="table-item-name">${room.tableName}</div>
+      <div class="table-item-info">
+        <span>${room.playersCount}/${room.maxPlayers} players</span>
+        <span>${room.numDecks} decks</span>
+      </div>
+      <button class="btn btn-small" onclick="joinRoom('${room.id}')">Join</button>
+    </div>
+  `).join('');
+}
+
+function initOnlineScreen() {
+  const createBtn = document.getElementById('create-table-btn');
+  const backBtn = document.getElementById('back-to-profile-btn2');
+  const searchInput = document.getElementById('search-tables');
+
+  if (createBtn) {
+    createBtn.addEventListener('click', () => {
+      const tableName = prompt('Enter table name:');
+      if (tableName) {
+        createTable(tableName);
+      }
+    });
+  }
+
+  if (backBtn) {
+    backBtn.addEventListener('click', () => {
+      ScreenManager.show('profile-screen');
+    });
+  }
+
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      filterRooms(e.target.value);
+    });
+  }
+}
+
+async function createTable(tableName) {
+  console.log(`Creating table: ${tableName}`);
+}
+
+function joinRoom(roomId) {
+  console.log(`Joining room: ${roomId}`);
+}
+
+function filterRooms(searchTerm) {
+  const items = document.querySelectorAll('.table-item');
+  items.forEach(item => {
+    const name = item.querySelector('.table-item-name').textContent.toLowerCase();
+    item.style.display = name.includes(searchTerm.toLowerCase()) ? 'block' : 'none';
+  });
+}
+
+// ============================================
+// LEGACY GAME ENGINE (keeping for now)
+// ============================================
 (function() {
   let S = {
     phase: 'welcome', shoe: [], shoeSize: 0, numDecks: 6,
@@ -348,5 +619,19 @@
     });
   }
 
-  document.addEventListener('DOMContentLoaded', init);
+  document.addEventListener('DOMContentLoaded', () => {
+    // Initialize auth and profile screens first
+    if (BackendClient.TokenStore.isLoggedIn()) {
+      showProfileScreen();
+    } else {
+      initAuthScreen();
+      ScreenManager.show('auth-screen');
+    }
+    initProfileScreen();
+    initPracticeScreen();
+    initOnlineScreen();
+
+    // Initialize legacy game engine
+    init();
+  });
 })();

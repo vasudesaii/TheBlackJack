@@ -4,6 +4,7 @@
 // GET  /api/player/history
 // GET  /api/player/leaderboard
 // POST /api/player/topup        (dev/demo only)
+// POST /api/player/reset        (reset profile)
 
 const router = require('express').Router();
 const { Queries } = require('../db');
@@ -13,15 +14,15 @@ const { authMiddleware } = require('../authMiddleware');
 router.use(authMiddleware);
 
 // ── Balance ──
-router.get('/balance', (req, res) => {
-  const row = Queries.getBalance.get(req.userId);
+router.get('/balance', async (req, res) => {
+  const row = await Queries.getBalance.get(req.userId);
   if (!row) return res.status(404).json({ error: 'User not found' });
   res.json({ balance: row.balance });
 });
 
 // ── Stats ──
-router.get('/stats', (req, res) => {
-  const stats = Queries.getStats.get(req.userId);
+router.get('/stats', async (req, res) => {
+  const stats = await Queries.getStats.get(req.userId);
   if (!stats) return res.status(404).json({ error: 'Stats not found' });
 
   const winRate = stats.rounds_played > 0
@@ -42,40 +43,65 @@ router.get('/stats', (req, res) => {
 });
 
 // ── Round History ──
-router.get('/history', (req, res) => {
+router.get('/history', async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 50, 200);
-  const rows = Queries.getPlayerHistory.all(req.userId, limit);
+  const rows = await Queries.getPlayerHistory.all(req.userId, limit);
   res.json({ history: rows, count: rows.length });
 });
 
 // ── Leaderboard ──
-router.get('/leaderboard', (req, res) => {
+router.get('/leaderboard', async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 10, 50);
   const sortBy = req.query.sort === 'wins' ? 'wins' : 'profit';
 
   const rows = sortBy === 'wins'
-    ? Queries.getLeaderboardByWins.all(limit)
-    : Queries.getLeaderboard.all(limit);
+    ? await Queries.getLeaderboardByWins.all(limit)
+    : await Queries.getLeaderboard.all(limit);
 
   res.json({ leaderboard: rows, sort: sortBy });
 });
 
 // ── Top-up (demo/dev convenience) ──
-router.post('/topup', (req, res) => {
+router.post('/topup', async (req, res) => {
   const amount = parseFloat(req.body?.amount) || 10000;
   if (amount <= 0 || amount > 100000) {
     return res.status(400).json({ error: 'Amount must be between 1 and 100,000' });
   }
-  Queries.adjustBalance.run(amount, req.userId);
-  Queries.addTransaction.run({
+
+  await Queries.adjustBalance.run(amount, req.userId);
+  const balance = (await Queries.getBalance.get(req.userId)).balance;
+  await Queries.addTransaction.run({
     userId: req.userId,
     amount,
-    balanceAfter: Queries.getBalance.get(req.userId).balance,
+    balanceAfter: balance,
     type: 'topup',
     description: 'Manual top-up',
   });
-  const newBal = Queries.getBalance.get(req.userId).balance;
-  res.json({ message: 'Balance topped up', balance: newBal });
+
+  res.json({ message: 'Balance topped up', balance });
+});
+
+// ── Reset Profile ──
+router.post('/reset', async (req, res) => {
+  const defaultBalance = 10000;
+  await Queries.setBalance.run(defaultBalance, req.userId);
+  await Queries.resetStats.run(req.userId);
+  await Queries.addTransaction.run({
+    userId: req.userId,
+    amount: 0,
+    balanceAfter: defaultBalance,
+    type: 'reset',
+    description: 'Profile reset',
+  });
+
+  res.json({ message: 'Profile reset', balance: defaultBalance });
+});
+
+// ── Available Rooms ──
+router.get('/rooms', (req, res) => {
+  const { listAvailableRooms } = require('../game/roomManager');
+  const rooms = listAvailableRooms();
+  res.json({ rooms });
 });
 
 module.exports = router;

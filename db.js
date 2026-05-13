@@ -1,12 +1,35 @@
-// ===== DATABASE LAYER — sql.js (pure JS SQLite, no native bindings) =====
-const initSqlJs = require('sql.js');
-const fs   = require('fs');
+// ===== DATABASE LAYER =====
+const fs = require('fs');
 const path = require('path');
+const { Pool } = require('pg');
+const initSqlJs = require('sql.js');
 
 const DB_PATH = path.join(__dirname, 'casino.db');
+const DATABASE_URL = process.env.DATABASE_URL?.trim();
+const USE_PG = Boolean(DATABASE_URL);
 
-let db;
+let pool;
+let sqliteDb;
 let _saveTimer;
+
+function normalizeParams(sql, params = {}) {
+  if (Array.isArray(params)) return { sql, values: params };
+  const values = [];
+  const indexMap = {};
+  const normalized = sql.replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (match, name) => {
+    if (!(name in indexMap)) {
+      indexMap[name] = values.length + 1;
+      values.push(params[`$${name}`] ?? params[name]);
+    }
+    return `$${indexMap[name]}`;
+  });
+  return { sql: normalized, values };
+}
+
+async function pgQuery(sql, params = {}) {
+  const { sql: text, values } = normalizeParams(sql, params);
+  return pool.query(text, values);
+}
 
 function scheduleSave() {
   clearTimeout(_saveTimer);
@@ -14,23 +37,24 @@ function scheduleSave() {
 }
 
 function saveToDisk() {
+  if (!sqliteDb) return;
   try {
-    const data = db.export();
+    const data = sqliteDb.export();
     fs.writeFileSync(DB_PATH, Buffer.from(data));
   } catch (err) {
     console.error('[DB] Save error:', err.message);
   }
 }
 
-function run(sql, params = {}) {
-  db.run(sql, params);
+function sqliteRun(sql, params = {}) {
+  sqliteDb.run(sql, params);
   scheduleSave();
-  const res = db.exec('SELECT last_insert_rowid()');
-  return { lastInsertRowid: res[0]?.values[0][0] ?? null };
+  const res = sqliteDb.exec('SELECT last_insert_rowid()');
+  return { lastInsertRowid: res[0]?.values?.[0]?.[0] ?? null };
 }
 
-function get(sql, params = []) {
-  const stmt = db.prepare(sql);
+function sqliteGet(sql, params = []) {
+  const stmt = sqliteDb.prepare(sql);
   stmt.bind(params);
   if (stmt.step()) {
     const row = stmt.getAsObject();
@@ -41,8 +65,8 @@ function get(sql, params = []) {
   return null;
 }
 
-function all(sql, params = []) {
-  const stmt = db.prepare(sql);
+function sqliteAll(sql, params = []) {
+  const stmt = sqliteDb.prepare(sql);
   stmt.bind(params);
   const rows = [];
   while (stmt.step()) rows.push(stmt.getAsObject());
@@ -50,7 +74,31 @@ function all(sql, params = []) {
   return rows;
 }
 
-const SCHEMA = `
+async function run(sql, params = {}) {
+  if (USE_PG) {
+    const result = await pgQuery(sql, params);
+    return { lastInsertRowid: result.rows?.[0]?.id ?? null, rowCount: result.rowCount };
+  }
+  return sqliteRun(sql, params);
+}
+
+async function get(sql, params = {}) {
+  if (USE_PG) {
+    const result = await pgQuery(sql, params);
+    return result.rows[0] || null;
+  }
+  return sqliteGet(sql, params);
+}
+
+async function all(sql, params = {}) {
+  if (USE_PG) {
+    const result = await pgQuery(sql, params);
+    return result.rows;
+  }
+  return sqliteAll(sql, params);
+}
+
+const SQLITE_SCHEMA = `
   CREATE TABLE IF NOT EXISTS users (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     username      TEXT    UNIQUE NOT NULL,
@@ -114,16 +162,84 @@ const SCHEMA = `
   );
 `;
 
+const PG_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS users (
+    id            SERIAL PRIMARY KEY,
+    username      TEXT    UNIQUE NOT NULL,
+    email         TEXT    UNIQUE,
+    password_hash TEXT    NOT NULL,
+    balance       NUMERIC NOT NULL DEFAULT 10000,
+    created_at    BIGINT NOT NULL DEFAULT FLOOR(EXTRACT(EPOCH FROM now())),
+    last_login    BIGINT
+  );
+  CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id         SERIAL PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token      TEXT    UNIQUE NOT NULL,
+    expires_at BIGINT NOT NULL,
+    created_at BIGINT NOT NULL DEFAULT FLOOR(EXTRACT(EPOCH FROM now()))
+  );
+  CREATE TABLE IF NOT EXISTS player_stats (
+    user_id       INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    wins          INTEGER NOT NULL DEFAULT 0,
+    losses        INTEGER NOT NULL DEFAULT 0,
+    pushes        INTEGER NOT NULL DEFAULT 0,
+    blackjacks    INTEGER NOT NULL DEFAULT 0,
+    surrenders    INTEGER NOT NULL DEFAULT 0,
+    total_wagered NUMERIC NOT NULL DEFAULT 0,
+    total_profit  NUMERIC NOT NULL DEFAULT 0,
+    rounds_played INTEGER NOT NULL DEFAULT 0,
+    highest_win   NUMERIC NOT NULL DEFAULT 0,
+    highest_bal   NUMERIC NOT NULL DEFAULT 10000
+  );
+  CREATE TABLE IF NOT EXISTS game_sessions (
+    id          SERIAL PRIMARY KEY,
+    room_id     TEXT UNIQUE NOT NULL,
+    num_decks   INTEGER NOT NULL DEFAULT 6,
+    max_players INTEGER NOT NULL DEFAULT 5,
+    status      TEXT NOT NULL DEFAULT 'waiting',
+    rounds_done INTEGER NOT NULL DEFAULT 0,
+    created_at  BIGINT NOT NULL DEFAULT FLOOR(EXTRACT(EPOCH FROM now())),
+    ended_at    BIGINT
+  );
+  CREATE TABLE IF NOT EXISTS round_results (
+    id            SERIAL PRIMARY KEY,
+    session_id    INTEGER NOT NULL REFERENCES game_sessions(id) ON DELETE CASCADE,
+    user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    round_number  INTEGER NOT NULL,
+    bet           NUMERIC NOT NULL,
+    outcome       TEXT NOT NULL,
+    payout        NUMERIC NOT NULL,
+    player_value  INTEGER,
+    dealer_value  INTEGER,
+    had_blackjack BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at    BIGINT NOT NULL DEFAULT FLOOR(EXTRACT(EPOCH FROM now()))
+  );
+  CREATE TABLE IF NOT EXISTS transactions (
+    id            SERIAL PRIMARY KEY,
+    user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    amount        NUMERIC NOT NULL,
+    balance_after NUMERIC NOT NULL,
+    type          TEXT NOT NULL,
+    description   TEXT,
+    created_at    BIGINT NOT NULL DEFAULT FLOOR(EXTRACT(EPOCH FROM now()))
+  );
+`;
+
 const Queries = {
   createUser: {
     run: ({ username, email, password_hash }) =>
-      run('INSERT INTO users (username, email, password_hash) VALUES ($u,$e,$p)',
+      run('INSERT INTO users (username, email, password_hash) VALUES ($u,$e,$p)' + (USE_PG ? ' RETURNING id' : ''),
         { $u: username, $e: email ?? null, $p: password_hash }),
   },
-  createStats: { run: (id) => run('INSERT OR IGNORE INTO player_stats (user_id) VALUES ($id)', { $id: id }) },
-  getUserByUsername: { get: (u) => get('SELECT * FROM users WHERE username = $u COLLATE NOCASE', { $u: u }) },
+  createStats: { run: (id) => run('INSERT INTO player_stats (user_id) VALUES ($id)' + (USE_PG ? '' : ''), { $id: id }) },
+  getUserByUsername: {
+    get: (u) => USE_PG
+      ? get('SELECT * FROM users WHERE LOWER(username) = LOWER($u)', { $u: u })
+      : get('SELECT * FROM users WHERE username = $u COLLATE NOCASE', { $u: u }),
+  },
   getUserById: { get: (id) => get('SELECT id,username,email,balance,created_at,last_login FROM users WHERE id=$id', { $id: id }) },
-  updateLastLogin: { run: (id) => run("UPDATE users SET last_login=strftime('%s','now') WHERE id=$id", { $id: id }) },
+  updateLastLogin: { run: (id) => run(`UPDATE users SET last_login=${USE_PG ? 'FLOOR(EXTRACT(EPOCH FROM now()))' : "strftime('%s','now')"} WHERE id=$id`, { $id: id }) },
 
   saveRefreshToken: {
     run: ({ userId, token, expiresAt }) =>
@@ -132,7 +248,7 @@ const Queries = {
   getRefreshToken: { get: (t) => get('SELECT * FROM refresh_tokens WHERE token=$t', { $t: t }) },
   deleteRefreshToken: { run: (t) => run('DELETE FROM refresh_tokens WHERE token=$t', { $t: t }) },
   deleteUserTokens: { run: (u) => run('DELETE FROM refresh_tokens WHERE user_id=$u', { $u: u }) },
-  cleanExpiredTokens: { run: () => run("DELETE FROM refresh_tokens WHERE expires_at < strftime('%s','now')") },
+  cleanExpiredTokens: { run: () => run(USE_PG ? 'DELETE FROM refresh_tokens WHERE expires_at < FLOOR(EXTRACT(EPOCH FROM now()))' : "DELETE FROM refresh_tokens WHERE expires_at < strftime('%s','now')") },
 
   getBalance: { get: (id) => get('SELECT balance FROM users WHERE id=$id', { $id: id }) },
   setBalance: { run: (bal, id) => run('UPDATE users SET balance=$b WHERE id=$id', { $b: bal, $id: id }) },
@@ -140,9 +256,9 @@ const Queries = {
 
   getStats: { get: (id) => get('SELECT * FROM player_stats WHERE user_id=$id', { $id: id }) },
   updateStats: {
-    run: ({ user_id, wins, losses, pushes, blackjacks, surrenders,
+    run: async ({ user_id, wins, losses, pushes, blackjacks, surrenders,
             total_wagered, total_profit, rounds_played, highest_win, highest_bal }) => {
-      const cur = get('SELECT highest_win,highest_bal FROM player_stats WHERE user_id=$id', { $id: user_id });
+      const cur = await get('SELECT highest_win,highest_bal FROM player_stats WHERE user_id=$id', { $id: user_id });
       const hw = Math.max(cur?.highest_win ?? 0, highest_win);
       const hb = Math.max(cur?.highest_bal ?? 0, highest_bal);
       return run(`UPDATE player_stats SET
@@ -155,16 +271,23 @@ const Queries = {
           $tw:total_wagered,$tp:total_profit,$rp:rounds_played,$hw:hw,$hb:hb,$uid:user_id });
     },
   },
+  resetStats: {
+    run: (userId) => run(`UPDATE player_stats SET
+      wins=0, losses=0, pushes=0, blackjacks=0, surrenders=0,
+      total_wagered=0, total_profit=0, rounds_played=0,
+      highest_win=0, highest_bal=10000
+      WHERE user_id=$id`, { $id: userId }),
+  },
 
   createSession: {
     run: ({ roomId, numDecks, maxPlayers }) =>
-      run('INSERT INTO game_sessions (room_id,num_decks,max_players) VALUES ($r,$d,$m)',
+      run('INSERT INTO game_sessions (room_id,num_decks,max_players) VALUES ($r,$d,$m)' + (USE_PG ? ' RETURNING id' : ''),
         { $r: roomId, $d: numDecks, $m: maxPlayers }),
   },
   getSession: { get: (r) => get('SELECT * FROM game_sessions WHERE room_id=$r', { $r: r }) },
   closeSession: {
     run: (rounds, roomId) =>
-      run("UPDATE game_sessions SET status='finished',ended_at=strftime('%s','now'),rounds_done=$r WHERE room_id=$id",
+      run(`UPDATE game_sessions SET status='finished',ended_at=${USE_PG ? 'FLOOR(EXTRACT(EPOCH FROM now()))' : "strftime('%s','now')"},rounds_done=$r WHERE room_id=$id`,
         { $r: rounds, $id: roomId }),
   },
   incrementRounds: { run: (r) => run('UPDATE game_sessions SET rounds_done=rounds_done+1 WHERE room_id=$r', { $r: r }) },
@@ -186,7 +309,7 @@ const Queries = {
   addTransaction: {
     run: ({ userId, amount, balanceAfter, type, description }) =>
       run('INSERT INTO transactions (user_id,amount,balance_after,type,description) VALUES ($u,$a,$b,$t,$d)',
-        { $u:userId,$a:amount,$b:balanceAfter,$t:type,$d:description??null }),
+        { $u:userId,$a:amount,$b:balanceAfter,$t:type,$d:description ?? null }),
   },
 
   getLeaderboard: {
@@ -203,54 +326,67 @@ const Queries = {
   },
 };
 
-function registerUser({ username, email, passwordHash }) {
-  const info = Queries.createUser.run({ username, email, password_hash: passwordHash });
-  Queries.createStats.run(info.lastInsertRowid);
-  return info.lastInsertRowid;
+async function registerUser({ username, email, passwordHash }) {
+  const info = await Queries.createUser.run({ username, email: email ?? null, password_hash: passwordHash });
+  const userId = info.lastInsertRowid;
+  if (userId) await Queries.createStats.run(userId);
+  return userId;
 }
 
-function persistRoundResults(roomId, roundNumber, playerResults, dealerValue) {
-  const session = Queries.getSession.get(roomId);
+async function persistRoundResults(roomId, roundNumber, playerResults, dealerValue) {
+  const session = await Queries.getSession.get(roomId);
   if (!session) return;
-  Queries.incrementRounds.run(roomId);
+  await Queries.incrementRounds.run(roomId);
   for (const pr of playerResults) {
     const { userId, bet, outcome, payout, playerValue, hadBlackjack, balance } = pr;
-    Queries.setBalance.run(balance, userId);
-    Queries.addTransaction.run({ userId, amount:payout, balanceAfter:balance,
-      type: payout >= 0 ? 'win' : 'loss', description:`Round ${roundNumber}: ${outcome}` });
-    Queries.saveRoundResult.run({ session_id:session.id, user_id:userId,
-      round_number:roundNumber, bet, outcome, payout, player_value:playerValue,
-      dealer_value:dealerValue, had_blackjack:hadBlackjack?1:0 });
-    Queries.updateStats.run({ user_id:userId,
-      wins: outcome==='win'||outcome==='blackjack'?1:0,
-      losses: outcome==='lose'||outcome==='bust'?1:0,
-      pushes: outcome==='push'?1:0,
-      blackjacks: outcome==='blackjack'?1:0,
-      surrenders: outcome==='surrender'?1:0,
-      total_wagered:bet, total_profit:payout, rounds_played:1,
-      highest_win: payout>0?payout:0, highest_bal:balance });
+    await Queries.setBalance.run(balance, userId);
+    await Queries.addTransaction.run({ userId, amount: payout, balanceAfter: balance,
+      type: payout >= 0 ? 'win' : 'loss', description: `Round ${roundNumber}: ${outcome}` });
+    await Queries.saveRoundResult.run({ session_id: session.id, user_id: userId,
+      round_number: roundNumber, bet, outcome, payout, player_value: playerValue,
+      dealer_value: dealerValue, had_blackjack: hadBlackjack ? 1 : 0 });
+    await Queries.updateStats.run({ user_id: userId,
+      wins: outcome === 'win' || outcome === 'blackjack' ? 1 : 0,
+      losses: outcome === 'lose' || outcome === 'bust' ? 1 : 0,
+      pushes: outcome === 'push' ? 1 : 0,
+      blackjacks: outcome === 'blackjack' ? 1 : 0,
+      surrenders: outcome === 'surrender' ? 1 : 0,
+      total_wagered: bet, total_profit: payout, rounds_played: 1,
+      highest_win: payout > 0 ? payout : 0, highest_bal: balance });
   }
-  saveToDisk();
+  if (!USE_PG) saveToDisk();
 }
 
 async function initDb() {
+  if (USE_PG) {
+    const pgOptions = { connectionString: DATABASE_URL };
+    if (process.env.PGSSLMODE !== 'disable') {
+      pgOptions.ssl = { rejectUnauthorized: false };
+    }
+    pool = new Pool(pgOptions);
+    await pool.query(PG_SCHEMA);
+    console.log('[DB] Connected to PostgreSQL');
+    return pool;
+  }
+
   const SQL = await initSqlJs({
     locateFile: (file) => path.join(__dirname, 'node_modules', 'sql.js', 'dist', file),
   });
   if (fs.existsSync(DB_PATH)) {
-    db = new SQL.Database(fs.readFileSync(DB_PATH));
+    sqliteDb = new SQL.Database(fs.readFileSync(DB_PATH));
     console.log('[DB] Loaded casino.db from disk');
   } else {
-    db = new SQL.Database();
+    sqliteDb = new SQL.Database();
     console.log('[DB] Created new casino.db');
   }
-  db.run('PRAGMA foreign_keys = ON');
-  db.exec(SCHEMA);
+  sqliteDb.run('PRAGMA foreign_keys = ON');
+  sqliteDb.exec(SQLITE_SCHEMA);
   saveToDisk();
   setInterval(() => { Queries.cleanExpiredTokens.run(); saveToDisk(); }, 3600_000);
   process.on('SIGTERM', saveToDisk);
-  process.on('SIGINT',  saveToDisk);
-  return db;
+  process.on('SIGINT', saveToDisk);
+  return sqliteDb;
 }
 
-module.exports = { initDb, Queries, registerUser, persistRoundResults };
+module.exports = { initDb, Queries, registerUser, persistRoundResults, USE_PG };
+
