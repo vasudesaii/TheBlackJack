@@ -15,13 +15,22 @@
         <div class="welcome-box">
             <div class="welcome-logo">♠ Royal Blackjack</div>
             <p class="welcome-sub">Login to Play Online</p>
-            <div id="login-form">
+            
+            <div class="auth-tabs">
+                <button id="tab-login" class="auth-tab active">Login</button>
+                <button id="tab-signup" class="auth-tab">Sign Up</button>
+            </div>
+
+            <div id="auth-form">
                 <input type="text" id="username" placeholder="Username" class="setup-input">
                 <input type="password" id="password" placeholder="Password" class="setup-input">
-                <button id="login-btn" class="btn-green btn-large">Login</button>
-                <button id="signup-btn" class="btn-large">Sign Up</button>
+                <div id="signup-fields" class="hidden">
+                    <input type="email" id="email" placeholder="Email (Optional)" class="setup-input">
+                </div>
+                <button id="auth-submit-btn" class="btn-green btn-large">Login</button>
             </div>
-            <div id="error-msg" style="color: red; margin-top: 10px;"></div>
+            
+            <div id="error-msg" style="color: #ff4444; margin-top: 15px; font-size: 0.85rem; font-weight: 600;"></div>
         </div>
     </div>
 

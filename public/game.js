@@ -31,18 +31,42 @@ const ScreenManager = {
 // ============================================
 
 function initAuthScreen() {
-  const loginBtn = document.getElementById('login-btn');
-  const signupBtn = document.getElementById('signup-btn');
+  const tabLogin = document.getElementById('tab-login');
+  const tabSignup = document.getElementById('tab-signup');
+  const signupFields = document.getElementById('signup-fields');
+  const submitBtn = document.getElementById('auth-submit-btn');
   const errorMsg = document.getElementById('error-msg');
   const usernameInput = document.getElementById('username');
   const passwordInput = document.getElementById('password');
+  const emailInput = document.getElementById('email');
 
-  const submitHandler = async (isSignup) => {
-    return async (e) => {
-      if (e) e.preventDefault();
+  let isSignupMode = false;
+
+  const setMode = (signup) => {
+    isSignupMode = signup;
+    if (signup) {
+      tabSignup.classList.add('active');
+      tabLogin.classList.remove('active');
+      signupFields.classList.remove('hidden');
+      submitBtn.textContent = 'Create Account';
+    } else {
+      tabLogin.classList.add('active');
+      tabSignup.classList.remove('active');
+      signupFields.classList.add('hidden');
+      submitBtn.textContent = 'Login';
+    }
+  };
+
+  if (tabLogin) tabLogin.addEventListener('click', () => setMode(false));
+  if (tabSignup) tabSignup.addEventListener('click', () => setMode(true));
+
+  if (submitBtn) {
+    submitBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
       errorMsg.textContent = '';
       const username = usernameInput.value.trim();
       const password = passwordInput.value.trim();
+      const email = emailInput ? emailInput.value.trim() : '';
 
       if (!username || !password) {
         errorMsg.textContent = 'Username and password required';
@@ -50,22 +74,20 @@ function initAuthScreen() {
       }
 
       try {
-        if (isSignup) {
-          await BackendClient.Auth.register(username, password, '');
+        if (isSignupMode) {
+          await BackendClient.Auth.register(username, password, email);
         } else {
           await BackendClient.Auth.login(username, password);
         }
         usernameInput.value = '';
         passwordInput.value = '';
+        if (emailInput) emailInput.value = '';
         showProfileScreen();
       } catch (err) {
         errorMsg.textContent = err.message || 'Authentication failed';
       }
-    };
-  };
-
-  if (loginBtn) loginBtn.addEventListener('click', submitHandler(false)());
-  if (signupBtn) signupBtn.addEventListener('click', submitHandler(true)());
+    });
+  }
 }
 
 // ============================================

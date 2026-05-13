@@ -10,10 +10,11 @@
 body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
 
 /* ===== SCREENS ===== */
-.screen{display:none;min-height:100vh}.screen.active{display:flex}
+.screen{display:none;min-height:100vh;flex-direction:column}
+.screen.active{display:flex}
 
 /* ===== WELCOME ===== */
-#welcome-screen{align-items:center;justify-content:center;background:var(--bg)}
+#welcome-screen{align-items:center;justify-content:center}
 .welcome-box{background:var(--bg2);border-radius:16px;padding:40px;max-width:480px;width:90%;text-align:center;border:1px solid var(--border)}
 .welcome-logo{font-size:1.8rem;font-weight:800;letter-spacing:.02em;margin-bottom:4px}
 .welcome-logo::first-letter{color:var(--green)}
@@ -38,6 +39,13 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 .setup-input:focus{outline:none;border-color:var(--green)}
 .setup-input-bet{width:100px;text-align:center;color:var(--green);font-weight:600}
 
+/* AUTH TABS */
+.auth-tabs { display: flex; gap: 4px; background: var(--bg); padding: 4px; border-radius: var(--radius); margin-bottom: 20px; border: 1px solid var(--border); }
+.auth-tab { flex: 1; padding: 10px; border: none; border-radius: 6px; background: transparent; color: var(--text3); font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: var(--transition); font-family: inherit; }
+.auth-tab.active { background: var(--bg3); color: var(--text); }
+.auth-tab:hover:not(.active) { color: var(--text2); }
+#signup-fields { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+
 /* ===== BUTTONS ===== */
 .btn-green{
   width:100%;padding:14px;border:none;border-radius:var(--radius);
@@ -50,7 +58,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 .btn-large{padding:16px;font-size:1.05rem;margin-top:8px}
 
 /* ===== GAME LAYOUT ===== */
-#game-screen{display:flex;height:100vh;overflow:hidden}
+#game-screen{height:100vh;overflow:hidden}
 
 /* LEFT PANEL */
 .left-panel{
@@ -310,7 +318,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 
 /* ===== NEW PROFILE & MODE SCREENS ===== */
 #profile-screen, #practice-setup-screen, #online-mode-screen {
-  align-items: center; justify-content: center; background: var(--bg);
+  align-items: center; justify-content: center;
 }
 .profile-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .btn-small { padding: 8px 16px; background: var(--bg3); color: var(--text); border: none; border-radius: var(--radius); cursor: pointer; font-size: 0.85rem; }
