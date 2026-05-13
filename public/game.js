@@ -31,42 +31,31 @@ const ScreenManager = {
 // ============================================
 
 function initAuthScreen() {
-  const guestNameInput = document.getElementById('guest-name');
-  const playBtn = document.getElementById('play-now-btn');
-  const errorMsg = document.getElementById('error-msg');
+  // Completely bypass the UI and auto-login as a guest
+  autoGuestLogin();
+}
 
-  if (playBtn) {
-    playBtn.addEventListener('click', async (e) => {
-      e.preventDefault();
-      const name = guestNameInput.value.trim();
-      if (!name || name.length < 2) {
-        errorMsg.textContent = 'Please enter a name (at least 2 characters)';
-        return;
-      }
+async function autoGuestLogin() {
+  const existingUser = BackendClient.TokenStore.getUser();
+  if (existingUser && existingUser.username) {
+    ScreenManager.show('online-mode-screen');
+    loadAvailableRooms();
+    return;
+  }
 
-      errorMsg.textContent = 'Connecting...';
-      playBtn.disabled = true;
+  const guestName = 'Player_' + Math.floor(Math.random() * 9000 + 1000);
+  const guestPassword = 'blackjack_guest_secure_pass_2024';
 
-      try {
-        // We use a fixed internal password for guests to simplify the experience
-        const guestPassword = 'blackjack_guest_secure_pass_2024';
-        
-        try {
-          // Try to login first (in case they used this name before)
-          await BackendClient.Auth.login(name, guestPassword);
-        } catch (err) {
-          // If login fails, try to register
-          await BackendClient.Auth.register(name, guestPassword, '');
-        }
-
-        guestNameInput.value = '';
-        showProfileScreen(); // Takes them to the lobby/dashboard
-      } catch (err) {
-        console.error('Auth error:', err);
-        errorMsg.textContent = 'Connection failed. Please try a different name.';
-        playBtn.disabled = false;
-      }
-    });
+  try {
+    try {
+      await BackendClient.Auth.login(guestName, guestPassword);
+    } catch (err) {
+      await BackendClient.Auth.register(guestName, guestPassword, '');
+    }
+    ScreenManager.show('online-mode-screen');
+    loadAvailableRooms();
+  } catch (err) {
+    console.error('Auto guest login failed:', err);
   }
 }
 
