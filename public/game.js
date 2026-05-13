@@ -31,60 +31,40 @@ const ScreenManager = {
 // ============================================
 
 function initAuthScreen() {
-  const tabLogin = document.getElementById('tab-login');
-  const tabSignup = document.getElementById('tab-signup');
-  const signupFields = document.getElementById('signup-fields');
-  const submitBtn = document.getElementById('auth-submit-btn');
+  const guestNameInput = document.getElementById('guest-name');
+  const playBtn = document.getElementById('play-now-btn');
   const errorMsg = document.getElementById('error-msg');
-  const usernameInput = document.getElementById('username');
-  const passwordInput = document.getElementById('password');
-  const emailInput = document.getElementById('email');
 
-  let isSignupMode = false;
-
-  const setMode = (signup) => {
-    isSignupMode = signup;
-    if (signup) {
-      tabSignup.classList.add('active');
-      tabLogin.classList.remove('active');
-      signupFields.classList.remove('hidden');
-      submitBtn.textContent = 'Create Account';
-    } else {
-      tabLogin.classList.add('active');
-      tabSignup.classList.remove('active');
-      signupFields.classList.add('hidden');
-      submitBtn.textContent = 'Login';
-    }
-  };
-
-  if (tabLogin) tabLogin.addEventListener('click', () => setMode(false));
-  if (tabSignup) tabSignup.addEventListener('click', () => setMode(true));
-
-  if (submitBtn) {
-    submitBtn.addEventListener('click', async (e) => {
+  if (playBtn) {
+    playBtn.addEventListener('click', async (e) => {
       e.preventDefault();
-      errorMsg.textContent = '';
-      const username = usernameInput.value.trim();
-      const password = passwordInput.value.trim();
-      const email = emailInput ? emailInput.value.trim() : '';
-
-      if (!username || !password) {
-        errorMsg.textContent = 'Username and password required';
+      const name = guestNameInput.value.trim();
+      if (!name || name.length < 2) {
+        errorMsg.textContent = 'Please enter a name (at least 2 characters)';
         return;
       }
 
+      errorMsg.textContent = 'Connecting...';
+      playBtn.disabled = true;
+
       try {
-        if (isSignupMode) {
-          await BackendClient.Auth.register(username, password, email);
-        } else {
-          await BackendClient.Auth.login(username, password);
+        // We use a fixed internal password for guests to simplify the experience
+        const guestPassword = 'blackjack_guest_secure_pass_2024';
+        
+        try {
+          // Try to login first (in case they used this name before)
+          await BackendClient.Auth.login(name, guestPassword);
+        } catch (err) {
+          // If login fails, try to register
+          await BackendClient.Auth.register(name, guestPassword, '');
         }
-        usernameInput.value = '';
-        passwordInput.value = '';
-        if (emailInput) emailInput.value = '';
-        showProfileScreen();
+
+        guestNameInput.value = '';
+        showProfileScreen(); // Takes them to the lobby/dashboard
       } catch (err) {
-        errorMsg.textContent = err.message || 'Authentication failed';
+        console.error('Auth error:', err);
+        errorMsg.textContent = 'Connection failed. Please try a different name.';
+        playBtn.disabled = false;
       }
     });
   }
